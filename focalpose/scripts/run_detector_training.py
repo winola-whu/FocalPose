@@ -35,6 +35,12 @@ if __name__ == '__main__':
     cfg.n_gpus = N_GPUS
 
     run_comment = ''
+    if 'housecat' in args.config:
+        cfg.urdf_ds_name = 'housecat'
+        cfg.train_ds_names = [('synthetic.housecat-1M.train', 1),
+                                  ('housecat.train', 1),]
+        cfg.n_symmetries_batch = 1
+        cfg.val_ds_names = [('housecat.test', 1)]
 
     if 'pix3d-sofa' in args.config:
         cfg.urdf_ds_name = 'pix3d-sofa'

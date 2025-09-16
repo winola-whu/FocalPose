@@ -50,6 +50,7 @@ class PosePredictor(nn.Module):
         assert K.shape == (bsz, 3, 3)
         assert TCO.shape == (bsz, 4, 4)
         assert len(labels) == bsz
+        print(labels)
         meshes = self.mesh_db.select(labels)
         points = meshes.sample_points(2000, deterministic=True)
         uv = project_points(points, K, TCO)

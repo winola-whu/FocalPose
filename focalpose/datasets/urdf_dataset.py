@@ -49,4 +49,21 @@ class CarsUrdfDataset:
         return self.index.loc[idx]
 
 
+class HouseCatDataset:
+    def __init__(self, root_dir):
+        root_dir = Path(root_dir); assert root_dir.exists()
+        infos = []
+        for model_dir in sorted(root_dir.iterdir()):
+            candidates = list(model_dir.glob("model.urdf")) or list(model_dir.glob("*.urdf"))
+            if not candidates: continue
+            urdf_path = candidates[0]
+            infos.append(dict(
+                urdf_path=urdf_path.as_posix(),
+                category='hc',
+                label=model_dir.name,  # the folder name is the registry label
+                scale=1,
+            ))
+        self.index = pd.DataFrame(infos)
 
+    def __len__(self): return len(self.index)
+    def __getitem__(self, idx): return self.index.loc[idx]

@@ -1,5 +1,6 @@
 import argparse
 from colorama import Fore, Style
+from scipy.linalg.tests.test_decomp import TestRQ
 
 from focalpose.config import LOCAL_DATA_DIR
 from focalpose.recording.record_dataset import record_dataset
@@ -25,8 +26,8 @@ def make_cfg(cfg_name,
     cfg.train_ratio = 0.95
 
     cfg.distributed = distributed
-    cfg.n_workers = 12
-    cfg.n_processes_per_gpu = 10
+    cfg.n_workers = 2
+    cfg.n_processes_per_gpu = 2
 
     cfg.scene_cls = 'focalpose.recording.bop_recording_scene.BopRecordingScene'
     cfg.scene_kwargs = dict(
@@ -68,7 +69,7 @@ def make_cfg(cfg_name,
         cfg.n_frames_per_chunk = 100
         cfg.n_chunks = n_frames // cfg.n_frames_per_chunk
         cfg.ds_name = f'{cfg_name}-1M'
-
+        cfg.scene_kwargs["texture_ds"] = "texture_dataset"
         cfg.scene_kwargs.update(
             urdf_ds='pix3d-table',
         )
@@ -113,6 +114,25 @@ def make_cfg(cfg_name,
         cfg.scene_kwargs.update(
             urdf_ds=cfg_name,
         )
+    elif 'housecat' in cfg_name:
+        cfg.overwrite = True
+        n_frames = 50000
+        # cfg.scene_kwargs['resolution'] = (640, 640)
+        # cfg.scene_kwargs['focal_interval'] = (200, 1200)
+        # cfg.scene_kwargs['objects_xyz_interval'] = ((-0.10, -0.10, 0.0), (0.10, 0.10, 0.0))
+        # cfg.scene_kwargs['border_check'] = False
+        cfg.n_frames_per_chunk = 10
+        cfg.n_chunks = n_frames // cfg.n_frames_per_chunk
+        cfg.ds_name = f'{cfg_name}-1M'
+        cfg.train_ratio = 0.9
+
+        cfg.scene_kwargs.update(
+            urdf_ds=cfg_name,
+            texture_ds='texture_dataset',
+            gpu_renderer=False,
+            camera_distance_interval=(0.7, 4.0),
+            domain_randomization=False,
+        )
 
     elif resume_ds_name:
         pass
@@ -121,11 +141,12 @@ def make_cfg(cfg_name,
         raise ValueError('Unknown config')
 
     if debug:
-        n_frames = 10
+        n_frames = 100
         cfg.overwrite = True
         cfg.ds_name = 'debug'
-        cfg.n_frames_per_chunk = 1
+        cfg.n_frames_per_chunk = 10
         cfg.n_chunks = n_frames // cfg.n_frames_per_chunk
+        cfg.scene_kwargs["gpu_renderer"] = False
 
     if resume_ds_name:
         cfg.resume = datasets_dir / resume_ds_name
@@ -139,7 +160,7 @@ def make_cfg(cfg_name,
 
 def main():
     parser = argparse.ArgumentParser('Dataset recording')
-    parser.add_argument('--config', default='', type=str)
+    parser.add_argument('--config', default='housecat', type=str)
     parser.add_argument('--resume', default='', type=str)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--local', action='store_true')

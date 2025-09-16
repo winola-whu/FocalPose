@@ -187,6 +187,16 @@ def train_pose(args):
     object_ds = make_urdf_dataset(args.urdf_ds_name)
     mesh_db = MeshDataBase.from_urdf_ds(object_ds).batched(n_sym=1, resample_n_points=20000).cuda().float()
 
+    if not hasattr(mesh_db, "_dumped_urdf_labels"):
+        mesh_db._dumped_urdf_labels = True
+        L = list(mesh_db.label_to_id.keys())
+        print("[DEBUG] URDF registry size:", len(L))
+        # Search for the long forms you expect to exist:
+        for probe in ["teapot-wooden", "teapot-wooden_glazed",
+                      "shoe-sky", "shoe-sky_blue_holes_right",
+                      "can-target", "can-target_tall"]:
+            print(f"[DEBUG] has {probe!r}:", probe in mesh_db.label_to_id)
+
     model = create_model_pose(cfg=args, renderer=renderer, mesh_db=mesh_db).cuda()
 
     if args.resume_run_id:

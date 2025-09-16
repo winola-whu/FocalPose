@@ -14,7 +14,7 @@ class BulletSceneRenderer(BaseScene):
                  urdf_ds='ycbv',
                  preload_cache=False,
                  background_color=(0, 0, 0),
-                 gpu_renderer=True,
+                 gpu_renderer=False,
                  gui=False):
 
         self.urdf_ds = make_urdf_dataset(urdf_ds)

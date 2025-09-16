@@ -74,7 +74,7 @@ if __name__ == '__main__':
             for files in obj.iterdir():
                 if files.suffix == '.obj' and n_obj == 0:
                     if files.with_suffix('').name != obj.name:
-                        copy2(files.as_posix(), files.with_name(f'{obj.name}_{cls.name.upper()}').with_suffix('.obj'))
+                        # copy2(files.as_posix(), files.with_name(f'{obj.name}_{cls.name.upper()}').with_suffix('.obj'))
                         obj_to_urdf(files.with_name(f'{obj.name}_{cls.name.upper()}').with_suffix('.obj'),
                                     files.with_name(f'{obj.name}_{cls.name.upper()}').with_suffix('.urdf'))
                     else:
@@ -85,3 +85,4 @@ if __name__ == '__main__':
             copy_path = cls_path / f'{obj.name}_{cls.name.upper()}'
             copy_path.mkdir(exist_ok=True, parents=True)
             copy_tree(obj.as_posix(), copy_path.as_posix())
+    print("Done")

@@ -10,6 +10,7 @@ from focalpose.lib3d.focalpose_ops import (
 )
 from focalpose.lib3d.mesh_losses import compute_ADD_L1_loss
 from focalpose.datasets.utils import perturb_detections
+from focalpose.lib3d.label_resolver import resolve_single
 
 
 def cast(obj):
@@ -26,12 +27,15 @@ def h_pose(model, mesh_db, data, meters,
     TCO_gt = cast(data.TCO).float()
     labels = np.array([obj['name'] for obj in data.objects])
 
+    reg_keys = list(mesh_db.label_to_id.keys())
+    labels_canon = [resolve_single(l, reg_keys) or l for l in labels]
+
     if cfg.perturb_bboxes:
         bboxes = cast(perturb_detections(data)).float()
     else:
         bboxes = cast(data.bboxes).float()
 
-    meshes = mesh_db.select(labels)
+    meshes = mesh_db.select(labels_canon)
     points = meshes.sample_points(cfg.n_points_loss, deterministic=False)
     TCO_possible_gt = TCO_gt.unsqueeze(1) @ meshes.symmetries
 
@@ -51,7 +55,7 @@ def h_pose(model, mesh_db, data, meters,
         raise ValueError('Unknown input generator', input_generator)
 
     # model.module.enable_debug()
-    outputs = model(images=images, K=K_init, labels=labels,
+    outputs = model(images=images, K=K_init, labels=labels_canon,
                     TCO=TCO_init, n_iterations=n_iterations, update_focal_length=cfg.predict_focal_length)
     # raise ValueError
 

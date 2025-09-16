@@ -66,7 +66,7 @@ def record_dataset_dask(client, ds_dir,
 
 def record_dataset(args):
     if args.resume and not args.overwrite:
-        resume_args = yaml.load((Path(args.resume) / 'config.yaml').read_text())
+        resume_args = yaml.load((Path(args.resume) / 'config.yaml').read_text(),  Loader=yaml.FullLoader)
         vars(args).update({k: v for k, v in vars(resume_args).items() if 'resume' not in k})
 
     args.ds_dir = Path(args.ds_dir)
@@ -115,7 +115,7 @@ def record_dataset(args):
                                interface=DASK_NETWORK_INTERFACE)
         cluster.adapt(minimum_jobs=args.n_workers, maximum_jobs=args.n_workers)
     else:
-        cluster = LocalCluster(local_directory=log_dir, processes=True, n_workers=8)
+        cluster = LocalCluster(local_directory=log_dir, processes=True, n_workers=8, memory_limit=0)
 
     client = Client(cluster)
 

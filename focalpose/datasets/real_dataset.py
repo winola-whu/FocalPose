@@ -1,8 +1,11 @@
+from difflib import get_close_matches
+import re
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from PIL import Image
 from scipy.spatial.transform import Rotation as R
+import json
 
 from .utils import make_masks_from_det
 from .datasets_cfg import make_urdf_dataset
@@ -157,5 +160,203 @@ class CompCars3DDataset:
 
         camera = dict(TWC=np.linalg.inv(TCO), K=K, resolution=rgb.shape[:2])
         objects = dict(TWO=np.eye(4), name=name, scale=1, id_in_segm=1, bbox=bbox)
+
+        return rgb, mask, dict(camera=camera, objects=[objects])
+
+
+def _K_33_from_fx_fy_cx_cy(K_list):
+    fx, fy, cx, cy = map(float, K_list)
+    return np.array([[fx, 0.0, cx],
+                     [0.0, fy, cy],
+                     [0.0, 0.0, 1.0]], dtype=np.float32)
+
+def _TCO_from_R_t(R, t):
+    T = np.eye(4, dtype=np.float32)
+    T[:3, :3] = np.asarray(R, dtype=np.float32)
+    T[:3, 3]  = np.asarray(t, dtype=np.float32).reshape(3,)
+    return T
+
+def _read_json_rows(json_path: Path):
+    rows = []
+    with open(json_path, "r") as f:
+        for rec in json.load(f):
+            K = _K_33_from_fx_fy_cx_cy(rec['K'])
+            img_rel = rec['image_path']
+            for obj in rec.get('objects', []):
+                rows.append(dict(
+                    img=img_rel,
+                    K=K,
+                    TCO=_TCO_from_R_t(obj['R'], obj['t']),
+                    bbox=np.asarray(obj['bbox_xywh'], dtype=np.float32),
+                    model_id=obj.get('name', ''),      # full name from meta.txt
+                    model_path=obj.get('model', ''),   # optional absolute .obj
+                    scene_id=rec.get('scene_id', ''),
+                    frame_id=rec.get('frame_id', '')
+                ))
+    return pd.DataFrame(rows)
+
+class HouseCatDataset:
+    """
+    Reads annotations/housecat_{split}.json and returns one object per sample.
+    Resolves per-instance names to a valid URDF label using both the URDF registry
+    and a fallback scan of models_urdf/HouseCat if needed. Drops unresolved rows.
+    """
+    def __init__(self, ds_dir, train=True, split=None, strict_urdf=True,
+                 urdf_name='housecat', urdf_dir=None):
+        self.ds_dir = Path(ds_dir)
+        assert self.ds_dir.exists(), f"Missing dataset root: {self.ds_dir}"
+
+        self.split = ('train' if train else 'test') if split is None else split
+        json_path = self.ds_dir / 'annotations' / f'housecat_{self.split}.json'
+        assert json_path.exists(), f"Missing {json_path}"
+
+        # --- Load rows from JSON
+        self.index = _read_json_rows(json_path)
+
+        # --- Build the set of available labels (union of URDF registry + folder scan)
+        urdf_labels = []
+        try:
+            urdf_ds = make_urdf_dataset(urdf_name)
+            urdf_labels = [obj['label'] for _, obj in urdf_ds.index.iterrows()]
+        except Exception:
+            pass
+
+        # Fallback: scan models_urdf/HouseCat alongside your project, or use user-provided dir
+        scan_dirs = []
+        if urdf_dir is not None:
+            scan_dirs.append(Path(urdf_dir))
+        # common locations relative to ds_dir
+        scan_dirs += [
+            (self.ds_dir.parent / "models_urdf" / "HouseCat"),
+            (self.ds_dir.parent / "models_urdf" / "housecat"),
+            (self.ds_dir.parent.parent / "models_urdf" / "HouseCat"),
+            (self.ds_dir.parent.parent / "models_urdf" / "housecat"),
+        ]
+        scanned = []
+        for d in scan_dirs:
+            if d.exists():
+                scanned += [p.name for p in d.iterdir() if p.is_dir()]
+        # merge & canonicalize (preserve original casing from urdf_labels first)
+        urdf_labels = list(dict.fromkeys(urdf_labels + scanned))
+
+        # If still empty, fail early with a helpful message
+        assert len(urdf_labels) > 0, (
+            "No URDF labels found. Either your 'housecat' URDF pack is not registered, "
+            "or 'urdf_dir' doesn't point to models_urdf/HouseCat. "
+            "Pass urdf_dir=... to HouseCatDataset."
+        )
+
+        self._urdf_labels = urdf_labels
+        self._urdf_lc = [u.lower() for u in urdf_labels]
+        self._urdf_set = set(self._urdf_lc)
+        self._lower2canon = {u.lower(): u for u in urdf_labels}
+
+        # --- Resolve names to URDF labels
+        self.index['mesh_label'] = self.index['model_id'].apply(self._resolve_label)
+
+        # --- Show a few mappings for sanity
+        shown = 0
+        print("[INFO] Example label resolutions:")
+        for orig, resolved in zip(self.index['model_id'].tolist(), self.index['mesh_label'].tolist()):
+            if isinstance(orig, str) and isinstance(resolved, str) and orig != resolved:
+                print(f"  {orig} -> {resolved}")
+                shown += 1
+                if shown >= 8:
+                    break
+        if shown == 0:
+            print("  (no changes; dataset names already match URDF labels)")
+
+        # --- Drop unresolved labels to prevent KeyError later
+        keep = self.index['mesh_label'].str.lower().isin(self._urdf_set)
+        dropped = int((~keep).sum())
+        if dropped:
+            bad = self.index.loc[~keep, 'model_id'].unique().tolist()[:10]
+            print(f"[WARN] Dropping {dropped} items with unknown URDF labels (e.g., {bad})")
+        self.index = self.index[keep].reset_index(drop=True)
+
+        # also keep canonical label list for quick checks
+        self.all_labels = urdf_labels
+
+    # ---------- resolution logic ----------
+    def _tokenize(self, s: str):
+        return [t for t in re.split(r'[_\-\s]+', s.lower()) if t]
+
+    def _resolve_label(self, s: str) -> str:
+        """Map dataset name to a URDF label using multiple strategies."""
+        if not isinstance(s, str) or not s:
+            return s
+        sl = s.strip().lower()
+
+        # 0) exact
+        if sl in self._lower2canon:
+            return self._lower2canon[sl]
+
+        # 1) dash/underscore variants
+        variants = (sl, sl.replace('-', '_'), sl.replace('_', '-'))
+        for v in variants:
+            if v in self._lower2canon:
+                return self._lower2canon[v]
+
+        # 2) prefix completion (e.g., 'shoe-sky' -> 'shoe-sky_blue_holes_right')
+        pref = [u for u in self._urdf_labels if u.lower().startswith(sl + '_') or u.lower().startswith(sl + '-')]
+        if len(pref) == 1:
+            return pref[0]
+        if len(pref) > 1:
+            return min(pref, key=len)
+
+        # 3) substring anywhere
+        sub = [u for u in self._urdf_labels if sl in u.lower()]
+        if len(sub) == 1:
+            return sub[0]
+        if len(sub) > 1:
+            return min(sub, key=len)
+
+        # 4) token overlap score
+        stoks = set(self._tokenize(sl))
+        if stoks:
+            best, best_score = None, 0.0
+            for u in self._urdf_labels:
+                utoks = set(self._tokenize(u))
+                if not utoks:
+                    continue
+                score = len(stoks & utoks) / float(len(stoks))
+                if score > best_score:
+                    best, best_score = u, score
+            if best is not None and best_score >= 0.6:
+                return best
+
+        m = get_close_matches(sl, self._urdf_lc, n=1, cutoff=0.8)
+        if m:
+            return self._lower2canon[m[0]]
+
+        # give up — will be filtered out by 'keep' mask
+        return s
+
+    # ---------- dataset API ----------
+    def __len__(self):
+        return len(self.index)
+
+    def __getitem__(self, idx):
+        e = self.index.iloc[idx]
+        rgb = np.asarray(Image.open((self.ds_dir / e['img'])).convert('RGB'))
+        H, W = rgb.shape[:2]
+
+        # enforce float32 everywhere
+        K   = np.asarray(e['K'],   np.float32)
+        TCO = np.asarray(e['TCO'], np.float32)
+        TWC = np.linalg.inv(TCO).astype(np.float32, copy=False)
+        TWO = np.eye(4, dtype=np.float32)
+        bbox = np.asarray(e['bbox'], np.float32)
+
+        mask = make_masks_from_det([np.clip(bbox, a_min=0, a_max=None)], H, W).squeeze(0).numpy()
+
+        # use resolved label so mesh_db.select(labels) always succeeds
+        name = e['mesh_label']
+
+        camera = dict(TWC=TWC, K=K, resolution=rgb.shape[:2])
+        objects = dict(TWO=TWO, name=name, scale=1, id_in_segm=1, bbox=bbox)
+
+        if isinstance(e.get('model_path'), str) and e['model_path']:
+            objects['mesh_path'] = e['model_path']
 
         return rgb, mask, dict(camera=camera, objects=[objects])

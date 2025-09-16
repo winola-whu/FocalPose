@@ -63,18 +63,18 @@ def obj_to_urdf(obj_path, urdf_path):
 
 
 if __name__ == '__main__':
-    urdf_path = LOCAL_DATA_DIR  / 'models_urdf' / 'StanfordCars3D'
-    urdf_path.mkdir(exist_ok=True, parents=True)
-    for cls in (LOCAL_DATA_DIR / 'StanfordCars' / 'models').iterdir():
-        cls_path = urdf_path / cls.name
-        cls_path.mkdir(exist_ok=True, parents=True)
-
-        for obj in cls.iterdir():
-            if obj.suffix == '.obj':
-                copy2(obj.as_posix(), obj.with_name(f'{cls.name}').with_suffix('.obj'))
-                obj_to_urdf(obj.with_name(f'{cls.name}').with_suffix('.obj'),
-                            obj.with_name(f'{cls.name}').with_suffix('.urdf'))
-        copy_tree(cls.as_posix(), cls_path.as_posix())
+    # urdf_path = LOCAL_DATA_DIR  / 'models_urdf' / 'StanfordCars3D'
+    # urdf_path.mkdir(exist_ok=True, parents=True)
+    # for cls in (LOCAL_DATA_DIR / 'StanfordCars' / 'models').iterdir():
+    #     cls_path = urdf_path / cls.name
+    #     cls_path.mkdir(exist_ok=True, parents=True)
+    #
+    #     for obj in cls.iterdir():
+    #         if obj.suffix == '.obj':
+    #             copy2(obj.as_posix(), obj.with_name(f'{cls.name}').with_suffix('.obj'))
+    #             obj_to_urdf(obj.with_name(f'{cls.name}').with_suffix('.obj'),
+    #                         obj.with_name(f'{cls.name}').with_suffix('.urdf'))
+    #     copy_tree(cls.as_posix(), cls_path.as_posix())
 
     urdf_path = LOCAL_DATA_DIR / 'models_urdf' / 'CompCars3D'
     urdf_path.mkdir(exist_ok=True, parents=True)
@@ -84,7 +84,7 @@ if __name__ == '__main__':
 
         for obj in cls.iterdir():
             if obj.suffix == '.obj':
-                copy2(obj.as_posix(), obj.with_name(f'{cls.name}').with_suffix('.obj'))
+                # copy2(obj.as_posix(), obj.with_name(f'{cls.name}').with_suffix('.obj'))
                 obj_to_urdf(obj.with_name(f'{cls.name}').with_suffix('.obj'),
                             obj.with_name(f'{cls.name}').with_suffix('.urdf'))
         copy_tree(cls.as_posix(), cls_path.as_posix())

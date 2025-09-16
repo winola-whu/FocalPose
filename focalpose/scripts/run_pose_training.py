@@ -206,6 +206,15 @@ def make_cfg(args):
                                   ('pix3d-chair.train', 4, None)]
             cfg.test_ds_names = [('pix3d-chair.test', 1, None)]
 
+    elif 'housecat' in args.config:
+        cfg.urdf_ds_name = 'housecat'
+        cfg.n_symmetries_batch = 1
+
+        if 'F10' in args.config:
+            cfg.train_ds_names = [('synthetic.housecat-1M.train', 1, None),
+                                  ('housecat.train', 1, None),]
+            cfg.test_ds_names = [('housecat.test', 1, None)]
+
     elif 'compcars3d' in args.config:
         cfg.urdf_ds_name = 'compcars3d'
         cfg.n_symmetries_batch = 1
@@ -278,7 +287,7 @@ def make_cfg(args):
     # Training
     cfg.batch_size = 32
     cfg.epoch_size = 115200
-    cfg.n_epochs = 700
+    cfg.n_epochs = 70
     cfg.n_dataloader_workers = N_WORKERS
 
     # Method

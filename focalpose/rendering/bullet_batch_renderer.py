@@ -103,7 +103,8 @@ class BulletBatchRenderer:
             images[data_id] = im[0]
             if render_depth:
                 depths[data_id] = depth[0]
-        images = torch.as_tensor(np.stack(images, axis=0)).pin_memory().cuda(non_blocking=True)
+        # images = torch.as_tensor(np.stack(images, axis=0)).pin_memory().cuda(non_blocking=True)
+        images = torch.as_tensor(np.stack(images, axis=0)).to(torch.device("cpu"))
         images = images.float().permute(0, 3, 1, 2) / 255
 
         if render_depth:

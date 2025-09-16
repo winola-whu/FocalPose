@@ -328,11 +328,11 @@ def evaluate(cfg):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Pose evaluation')
-    parser.add_argument('--img', default='', type=str)
-    parser.add_argument('--cls', default='', type=str,
-                        choices=['chair', 'sofa', 'table', 'bed', 'compcars', 'stanfordcars'])
-    parser.add_argument('--niter', default=1, type=int)
-    parser.add_argument('--topk', default=15, type=int)
+    parser.add_argument('--img', default='/imgs/B1.jpg', type=str)
+    parser.add_argument('--cls', default='sofa', type=str,
+                        choices=['chair', 'sofa', 'table', 'bed', 'compcars', 'stanfordcars', 'housecat'])
+    parser.add_argument('--niter', default=12, type=int)
+    parser.add_argument('--topk', default=5, type=int)
     args = parser.parse_args()
     cfg = argparse.ArgumentParser('').parse_args([])
 
